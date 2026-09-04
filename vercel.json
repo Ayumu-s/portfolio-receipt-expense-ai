@@ -1,0 +1,19 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "fastapi",
+  "functions": {
+    "api/index.py": {
+      "includeFiles": [
+        "assets/**",
+        "templates/**"
+      ],
+      "excludeFiles": [
+        "tests/**",
+        "alembic/**",
+        "*.env",
+        "*.db",
+        "*.sqlite*"
+      ]
+    }
+  }
+}

@@ -51,6 +51,12 @@ New-Item -ItemType Directory -Force .runtime | Out-Null
 
 ブラウザで `http://127.0.0.1:8000` を開くと、ログイン画面を経由せずMockデモへ直接入れます。架空画像をアップロードすると、固定のMockデータが表示されます。`/login`へアクセスした場合もトップ画面へ戻ります。
 
+## Vercel公開デモ
+
+`api/index.py` をVercel Functionsの入口として使用します。Vercel上では`PORTFOLIO_DEMO_MODE=true`と一時SQLiteを使用するため、登録・編集データはデプロイ環境に永続保存されません。公開デモは架空データ専用です。
+
+VercelのProject Rootはリポジトリ直下に設定し、Productionの公開URLをこの章の先頭に追加します。
+
 ## テストと確認範囲
 
 `tests/test_mock_analysis.py` で固定の架空解析結果を確認できます。Python全体の構文チェックも通過しています。画面上の主要導線と実データでの動作は別の確認範囲です。
@@ -58,7 +64,7 @@ New-Item -ItemType Directory -Force .runtime | Out-Null
 ## 未実装・制約
 
 - Mock結果は実画像の内容や実AIの品質を再現しない
-- 本番デプロイの設定はこのリポジトリの対象外
+- Vercel公開デモは一時データで動作し、本番運用向けの永続DB・認証構成ではない
 
 ## セキュリティとサンプルデータ
 
