@@ -57,7 +57,7 @@ New-Item -ItemType Directory -Force .runtime | Out-Null
 
 `api/index.py` をVercel Functionsの入口として使用します。Vercel上では`PORTFOLIO_DEMO_MODE=true`と一時SQLiteを使用するため、登録・編集データはデプロイ環境に永続保存されません。公開デモは架空データ専用です。
 
-VercelのProject Rootはリポジトリ直下に設定し、Productionの公開URLをこの章の先頭に追加します。
+VercelのProject Rootはリポジトリ直下に設定します。
 
 ## テストと確認範囲
 
@@ -74,4 +74,4 @@ APIキー、認証情報、実レシート画像、個人情報をリポジト�
 
 ## ライセンス / 作者
 
-ポートフォリオ公開用。ライセンスと作者情報は公開前に確定します。
+ポートフォリオ公開用。
