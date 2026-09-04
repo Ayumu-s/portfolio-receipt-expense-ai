@@ -3,17 +3,8 @@
   "framework": "fastapi",
   "functions": {
     "api/index.py": {
-      "includeFiles": [
-        "assets/**",
-        "templates/**"
-      ],
-      "excludeFiles": [
-        "tests/**",
-        "alembic/**",
-        "*.env",
-        "*.db",
-        "*.sqlite*"
-      ]
+      "includeFiles": "{assets/**,templates/**}",
+      "excludeFiles": "{tests/**,alembic/**,*.env,*.db,*.sqlite*}"
     }
   }
 }
