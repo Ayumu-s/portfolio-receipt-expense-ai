@@ -1,0 +1,75 @@
+{% set current_path = request.url.path %}
+<nav class="sticky top-0 z-30 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur">
+    <div class="mx-auto flex min-h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
+        <a href="/" class="flex items-center gap-2.5 text-slate-900 transition-colors hover:text-blue-700">
+            <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-sm font-bold text-white shadow-sm">経</span>
+            <span class="text-base font-bold tracking-tight">経費管理アプリ</span>
+        </a>
+
+        <div class="hidden items-center gap-1 md:flex">
+            <a href="/upload"
+               class="rounded-lg px-3 py-2 text-sm font-semibold transition-colors {{ 'bg-blue-50 text-blue-700' if current_path == '/upload' else 'text-slate-600 hover:bg-slate-50 hover:text-blue-700' }}"
+               {% if current_path == '/upload' %}aria-current="page"{% endif %}>アップロード</a>
+            <a href="/receipts"
+               class="rounded-lg px-3 py-2 text-sm font-semibold transition-colors {{ 'bg-blue-50 text-blue-700' if current_path.startswith('/receipts') else 'text-slate-600 hover:bg-slate-50 hover:text-blue-700' }}"
+               {% if current_path.startswith('/receipts') %}aria-current="page"{% endif %}>一覧</a>
+            <a href="/summary"
+               class="rounded-lg px-3 py-2 text-sm font-semibold transition-colors {{ 'bg-blue-50 text-blue-700' if current_path == '/summary' else 'text-slate-600 hover:bg-slate-50 hover:text-blue-700' }}"
+               {% if current_path == '/summary' %}aria-current="page"{% endif %}>集計</a>
+            {% if not portfolio_demo_mode and current_user and current_user.role == 'admin' %}
+            <a href="/admin/users"
+               class="rounded-lg px-3 py-2 text-sm font-semibold transition-colors {{ 'bg-blue-50 text-blue-700' if current_path.startswith('/admin') else 'text-slate-600 hover:bg-slate-50 hover:text-blue-700' }}"
+               {% if current_path.startswith('/admin') %}aria-current="page"{% endif %}>ユーザー管理</a>
+            {% endif %}
+            {% if not portfolio_demo_mode %}
+            <a href="/account/password" class="ml-2 border-l border-slate-200 px-3 py-2 text-sm font-semibold text-slate-500 hover:text-blue-700">{{ current_user.username if current_user else 'アカウント' }}</a>
+            <form method="post" action="/logout" class="ml-2 border-l border-slate-200 pl-3">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-500 transition-colors hover:bg-red-50 hover:text-red-700">ログアウト</button>
+            </form>
+            {% endif %}
+        </div>
+
+        <button id="navToggle" type="button"
+                class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-slate-200 text-slate-600 transition-colors hover:bg-slate-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 md:hidden"
+                aria-label="メニューを開く" aria-expanded="false" aria-controls="mobileMenu">
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+            </svg>
+        </button>
+    </div>
+
+    <div id="mobileMenu" class="hidden border-t border-slate-100 bg-white px-4 py-3 md:hidden" aria-label="モバイルメニュー">
+        <div class="space-y-1">
+            <a href="/upload" class="block rounded-lg px-3 py-3 text-sm font-semibold {{ 'bg-blue-50 text-blue-700' if current_path == '/upload' else 'text-slate-700 hover:bg-slate-50' }}" {% if current_path == '/upload' %}aria-current="page"{% endif %}>アップロード</a>
+            <a href="/receipts" class="block rounded-lg px-3 py-3 text-sm font-semibold {{ 'bg-blue-50 text-blue-700' if current_path.startswith('/receipts') else 'text-slate-700 hover:bg-slate-50' }}" {% if current_path.startswith('/receipts') %}aria-current="page"{% endif %}>一覧</a>
+            <a href="/summary" class="block rounded-lg px-3 py-3 text-sm font-semibold {{ 'bg-blue-50 text-blue-700' if current_path == '/summary' else 'text-slate-700 hover:bg-slate-50' }}" {% if current_path == '/summary' %}aria-current="page"{% endif %}>集計</a>
+            {% if not portfolio_demo_mode and current_user and current_user.role == 'admin' %}
+            <a href="/admin/users" class="block rounded-lg px-3 py-3 text-sm font-semibold {{ 'bg-blue-50 text-blue-700' if current_path.startswith('/admin') else 'text-slate-700 hover:bg-slate-50' }}">ユーザー管理</a>
+            {% endif %}
+            {% if not portfolio_demo_mode %}
+            <a href="/account/password" class="block rounded-lg px-3 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">{{ current_user.username if current_user else 'アカウント' }}・パスワード変更</a>
+            {% endif %}
+        </div>
+        {% if not portfolio_demo_mode %}
+        <form method="post" action="/logout" class="mt-3 border-t border-slate-100 pt-3">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="block w-full rounded-lg px-3 py-3 text-left text-sm font-semibold text-slate-500 transition-colors hover:bg-red-50 hover:text-red-700">ログアウト</button>
+        </form>
+        {% endif %}
+    </div>
+</nav>
+
+<script>
+    (() => {
+        const navToggle = document.getElementById('navToggle');
+        const mobileMenu = document.getElementById('mobileMenu');
+        if (!navToggle || !mobileMenu) return;
+
+        navToggle.addEventListener('click', () => {
+            const isOpen = !mobileMenu.classList.toggle('hidden');
+            navToggle.setAttribute('aria-expanded', String(isOpen));
+            navToggle.setAttribute('aria-label', isOpen ? 'メニューを閉じる' : 'メニューを開く');
+        });
+    })();
+</script>

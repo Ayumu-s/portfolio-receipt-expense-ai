@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>レシートアップロード</title>
+    <link rel="stylesheet" href="/assets/app.css">
+    <link rel="stylesheet" href="/assets/demo.css">
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-900">
+
+    {% include "_nav.html" %}
+
+    <main class="mx-auto max-w-3xl px-4 py-10 sm:px-6 sm:py-14">
+        <div class="mb-8 max-w-2xl">
+            <p class="mb-3 text-sm font-bold tracking-[0.16em] text-blue-700">UPLOAD</p>
+            <h1 class="text-3xl font-bold tracking-tight text-slate-900">レシート画像を追加</h1>
+            <p class="mt-3 text-sm leading-6 text-slate-600">架空のサンプルを選ぶだけで、画像解析から一覧・集計までの流れを確認できます。自分の画像を使う場合は、下のアップロード欄から選択してください。</p>
+        </div>
+
+        {% if error %}
+        <div class="mb-6 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700" role="alert">
+            <svg class="mt-0.5 h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M10.29 3.86l-7.5 13A2 2 0 004.53 20h14.94a2 2 0 001.74-3.14l-7.5-13a2 2 0 00-3.42 0z"/></svg>
+            {{ error }}
+        </div>
+        {% endif %}
+
+        <section class="portfolio-demo-panel" aria-labelledby="demoSamplesTitle">
+            <div class="portfolio-demo-header">
+                <div>
+                    <p class="portfolio-demo-kicker">PORTFOLIO DEMO</p>
+                    <h2 id="demoSamplesTitle">架空レシートで試してみる</h2>
+                </div>
+                <span class="portfolio-demo-badge">Mock / 外部AIなし</span>
+            </div>
+            <p class="portfolio-demo-description">画像をドラッグ＆ドロップしなくても、サンプルを選ぶだけで解析対象にセットできます。表示される店舗名・金額はすべて公開用の架空データです。</p>
+            <div class="demo-receipt-grid">
+                <button type="button" class="demo-receipt-card is-selected" data-sample-id="grocery" aria-pressed="true" aria-label="食料品のサンプルを選択" data-sample-label="食料品" data-sample-url="/assets/demo/receipts/receipt-grocery.png" data-sample-filename="portfolio-demo-grocery.png">
+                    <span class="demo-receipt-image-wrap">
+                        <img src="/assets/demo/receipts/receipt-grocery.png" alt="食料品の架空レシートサンプル" fetchpriority="high">
+                        <span class="demo-receipt-check" aria-hidden="true">✓</span>
+                    </span>
+                    <span class="demo-receipt-copy"><strong>食料品</strong><small>2026年8月 · Demo Market<br>1,277円</small></span>
+                </button>
+                <button type="button" class="demo-receipt-card" data-sample-id="cafe" aria-pressed="false" aria-label="カフェのサンプルを選択" data-sample-label="カフェ" data-sample-url="/assets/demo/receipts/receipt-cafe.png" data-sample-filename="portfolio-demo-cafe.png">
+                    <span class="demo-receipt-image-wrap">
+                        <img src="/assets/demo/receipts/receipt-cafe.png" alt="カフェの架空レシートサンプル" loading="lazy">
+                    </span>
+                    <span class="demo-receipt-copy"><strong>カフェ</strong><small>2025年5月 · カフェ ソラノネ<br>980円</small></span>
+                </button>
+                <button type="button" class="demo-receipt-card" data-sample-id="stationery" aria-pressed="false" aria-label="文具のサンプルを選択" data-sample-label="文具" data-sample-url="/assets/demo/receipts/receipt-stationery.png" data-sample-filename="portfolio-demo-stationery.png">
+                    <span class="demo-receipt-image-wrap">
+                        <img src="/assets/demo/receipts/receipt-stationery.png" alt="文具の架空レシートサンプル" loading="lazy">
+                    </span>
+                    <span class="demo-receipt-copy"><strong>文具</strong><small>2025年5月 · 文具の森<br>3,795円</small></span>
+                </button>
+                <button type="button" class="demo-receipt-card" data-sample-id="restaurant" aria-pressed="false" aria-label="飲食店のサンプルを選択" data-sample-label="飲食店" data-sample-url="/assets/demo/receipts/receipt-restaurant.png" data-sample-filename="portfolio-demo-restaurant.png">
+                    <span class="demo-receipt-image-wrap">
+                        <img src="/assets/demo/receipts/receipt-restaurant.png" alt="飲食店の架空レシートサンプル" loading="lazy">
+                    </span>
+                    <span class="demo-receipt-copy"><strong>飲食店</strong><small>2024年5月 · 和ごころ食堂 結<br>4,800円</small></span>
+                </button>
+                <button type="button" class="demo-receipt-card" data-sample-id="household" aria-pressed="false" aria-label="日用品のサンプルを選択" data-sample-label="日用品" data-sample-url="/assets/demo/receipts/receipt-household.png" data-sample-filename="portfolio-demo-household.png">
+                    <span class="demo-receipt-image-wrap">
+                        <img src="/assets/demo/receipts/receipt-household.png" alt="日用品の架空レシートサンプル" loading="lazy">
+                    </span>
+                    <span class="demo-receipt-copy"><strong>日用品</strong><small>2024年6月 · 毎日くらしの店<br>2,100円</small></span>
+                </button>
+            </div>
+            <p id="selectedSampleStatus" class="portfolio-demo-status" role="status" aria-live="polite">食料品のサンプルを解析対象にセットしています。</p>
+        </section>
+
+        <form method="post" enctype="multipart/form-data" id="uploadForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div id="uploadError" class="mb-4 hidden rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800" role="alert"></div>
+
+            <!-- ドロップエリア -->
+            <label for="fileInput"
+                class="group block cursor-pointer rounded-3xl border-2 border-dashed border-slate-300 bg-white p-8 text-center shadow-sm transition hover:border-blue-400 hover:bg-blue-50/50 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100 sm:p-12"
+                id="dropZone" aria-describedby="uploadHelp">
+                <div class="flex flex-col items-center gap-3">
+                    <span class="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 transition group-hover:bg-blue-100">
+                    <svg class="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                    </svg>
+                    </span>
+                    <p class="font-semibold text-slate-800">自分のレシート画像を選ぶ</p>
+                    <p class="text-sm text-slate-500">クリックまたはドラッグ＆ドロップ · JPG / PNG / WEBP / HEIC</p>
+                    <p id="uploadHelp" class="text-xs text-slate-400">最大 {{ max_files_per_upload }} 件・1ファイル {{ max_upload_mb }}MB まで</p>
+                </div>
+                <input type="file" id="fileInput" name="files" accept="image/*" multiple required class="sr-only">
+            </label>
+
+            <!-- 選択ファイル表示 -->
+            <div id="fileList" class="mt-5 hidden space-y-2" aria-live="polite"></div>
+
+            <!-- 送信ボタン -->
+            <button type="submit" id="submitBtn"
+                disabled
+                class="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-6 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span id="submitLabel">画像を選択すると解析できます</span>
+            </button>
+        </form>
+
+        <!-- ローディング表示 -->
+        <div id="loading" class="mt-5 hidden rounded-2xl border border-blue-100 bg-blue-50 px-4 py-4 text-blue-800" role="status" aria-live="polite">
+            <div class="flex items-start gap-3">
+                <svg class="mt-0.5 h-5 w-5 shrink-0 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                </svg>
+                <div>
+                    <p class="font-semibold">AI解析中です</p>
+                    <p class="mt-1 text-sm text-blue-700">選択した画像を同時に解析し、完了後に一覧へ反映します。画面を閉じずにお待ちください。</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const fileList = document.getElementById('fileList');
+        const submitBtn = document.getElementById('submitBtn');
+        const submitLabel = document.getElementById('submitLabel');
+        const loading = document.getElementById('loading');
+        const uploadError = document.getElementById('uploadError');
+        const dropZone = document.getElementById('dropZone');
+        const uploadForm = document.getElementById('uploadForm');
+        const demoSampleButtons = Array.from(document.querySelectorAll('.demo-receipt-card'));
+        const selectedSampleStatus = document.getElementById('selectedSampleStatus');
+        let selectingSample = false;
+        const maxFiles = {{ max_files_per_upload }};
+        const maxUploadMb = {{ max_upload_mb }};
+        const maxBytes = maxUploadMb * 1024 * 1024;
+
+        const formatSize = (bytes) => {
+            if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))}KB`;
+            return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+        };
+
+        const setUploadError = (message = '') => {
+            uploadError.textContent = message;
+            uploadError.classList.toggle('hidden', !message);
+        };
+
+        const setSelectedSample = (sampleButton) => {
+            demoSampleButtons.forEach(button => {
+                const isSelected = button === sampleButton;
+                button.classList.toggle('is-selected', isSelected);
+                button.setAttribute('aria-pressed', String(isSelected));
+                const check = button.querySelector('.demo-receipt-check');
+                if (check) check.remove();
+                if (isSelected) {
+                    const imageWrap = button.querySelector('.demo-receipt-image-wrap');
+                    const checkMark = document.createElement('span');
+                    checkMark.className = 'demo-receipt-check';
+                    checkMark.setAttribute('aria-hidden', 'true');
+                    checkMark.textContent = '✓';
+                    imageWrap?.appendChild(checkMark);
+                }
+            });
+        };
+
+        const setManualSelection = () => {
+            demoSampleButtons.forEach(button => {
+                button.classList.remove('is-selected');
+                button.setAttribute('aria-pressed', 'false');
+                button.querySelector('.demo-receipt-check')?.remove();
+            });
+            if (selectedSampleStatus) selectedSampleStatus.textContent = '自分の画像を解析対象にセットしています。';
+        };
+
+        const selectDemoSample = async (sampleButton) => {
+            if (selectingSample || !sampleButton) return;
+            selectingSample = true;
+            demoSampleButtons.forEach(button => { button.disabled = true; });
+            if (selectedSampleStatus) selectedSampleStatus.textContent = 'サンプル画像を読み込んでいます…';
+            setUploadError();
+            try {
+                const response = await fetch(sampleButton.dataset.sampleUrl);
+                if (!response.ok) throw new Error('sample image request failed');
+                const blob = await response.blob();
+                const file = new File([blob], sampleButton.dataset.sampleFilename || 'portfolio-demo-receipt.png', {
+                    type: blob.type || 'image/png',
+                    lastModified: Date.now(),
+                });
+                const transfer = new DataTransfer();
+                transfer.items.add(file);
+                fileInput.files = transfer.files;
+                setSelectedSample(sampleButton);
+                if (selectedSampleStatus) selectedSampleStatus.textContent = `${sampleButton.dataset.sampleLabel}の架空サンプルを解析対象にセットしました。下のボタンからMock解析を開始できます。`;
+                renderFiles();
+            } catch (error) {
+                setUploadError('サンプル画像を読み込めませんでした。自分の画像を選択してください。');
+                if (selectedSampleStatus) selectedSampleStatus.textContent = 'サンプルを読み込めませんでした。';
+            } finally {
+                selectingSample = false;
+                demoSampleButtons.forEach(button => { button.disabled = false; });
+            }
+        };
+
+        const renderFiles = () => {
+            const files = Array.from(fileInput.files || []);
+            const invalidSize = files.filter(file => file.size > maxBytes);
+            const tooMany = files.length > maxFiles;
+            const hasError = tooMany || invalidSize.length > 0;
+            setUploadError(tooMany
+                ? `選択できる画像は${maxFiles}件までです。`
+                : invalidSize.length > 0
+                    ? `${invalidSize.map(file => file.name).join('、')} は${maxUploadMb}MBを超えています。`
+                    : '');
+
+            fileList.innerHTML = '';
+            fileList.classList.toggle('hidden', files.length === 0);
+            files.forEach(file => {
+                const item = document.createElement('div');
+                item.className = `flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm ${file.size > maxBytes ? 'border-red-200 bg-red-50 text-red-700' : 'border-slate-200 bg-white text-slate-700'}`;
+                item.insertAdjacentHTML('beforeend', `<svg class="h-5 w-5 shrink-0 ${file.size > maxBytes ? 'text-red-500' : 'text-blue-500'}" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>`);
+                const name = document.createElement('span');
+                name.className = 'min-w-0 flex-1 truncate';
+                name.textContent = file.name;
+                const size = document.createElement('span');
+                size.className = 'shrink-0 text-xs text-slate-400';
+                size.textContent = formatSize(file.size);
+                item.append(name, size);
+                fileList.appendChild(item);
+            });
+
+            submitBtn.disabled = files.length === 0 || hasError;
+            submitLabel.textContent = files.length > 0 && !hasError ? `${files.length}件をAI解析する` : '画像を選択すると解析できます';
+        };
+
+        fileInput.addEventListener('change', () => {
+            setManualSelection();
+            renderFiles();
+        });
+        ['dragenter', 'dragover'].forEach(eventName => dropZone.addEventListener(eventName, event => {
+            event.preventDefault();
+            dropZone.classList.add('border-blue-500', 'bg-blue-50');
+        }));
+        ['dragleave', 'drop'].forEach(eventName => dropZone.addEventListener(eventName, event => {
+            event.preventDefault();
+            dropZone.classList.remove('border-blue-500', 'bg-blue-50');
+        }));
+        dropZone.addEventListener('drop', event => {
+            const droppedFiles = event.dataTransfer?.files;
+            if (!droppedFiles?.length) return;
+            fileInput.files = droppedFiles;
+            setManualSelection();
+            renderFiles();
+        });
+
+        demoSampleButtons.forEach(button => button.addEventListener('click', () => selectDemoSample(button)));
+
+        uploadForm.addEventListener('submit', event => {
+            if (submitBtn.disabled) {
+                event.preventDefault();
+                return;
+            }
+            submitBtn.disabled = true;
+            submitLabel.textContent = '解析中です…';
+            loading.classList.remove('hidden');
+        });
+
+        renderFiles();
+        selectDemoSample(demoSampleButtons[0]);
+    </script>
+
+</body>
+</html>

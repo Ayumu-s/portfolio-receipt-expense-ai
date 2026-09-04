@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>レシート編集</title>
+    <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-900">
+
+    {% include "_nav.html" %}
+
+    <main class="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
+        <div class="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+                <p class="mb-3 text-sm font-bold tracking-[0.16em] text-blue-700">REVIEW</p>
+                <h1 class="text-3xl font-bold tracking-tight text-slate-900">レシート内容を確認</h1>
+                <p class="mt-2 text-sm text-slate-600">読み取り結果を項目ごとに確認し、必要な箇所だけ修正できます。</p>
+            </div>
+            <a href="/receipts" class="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-blue-100">一覧に戻る</a>
+        </div>
+
+        <div class="grid gap-6 lg:grid-cols-[minmax(220px,280px)_1fr]">
+
+            <!-- 画像プレビュー -->
+            <div class="lg:sticky lg:top-24 lg:self-start">
+                <p class="mb-2 text-sm font-semibold text-slate-700">元のレシート画像</p>
+                <div class="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
+                    <img src="/receipts/{{ receipt.id }}/image"
+                        alt="{{ receipt.filename }}"
+                        class="max-h-[32rem] w-full rounded-2xl object-contain">
+                </div>
+                <p class="mt-2 break-all text-center text-xs text-slate-400">{{ receipt.filename }}</p>
+            </div>
+
+            <!-- 編集フォーム -->
+            <div class="min-w-0">
+                <form method="post" action="/receipts/{{ receipt.id }}/edit" id="editForm" class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <div class="grid gap-5 sm:grid-cols-2">
+                        <div>
+                            <label for="dateStr" class="mb-2 block text-sm font-semibold text-slate-700">日付</label>
+                            <input id="dateStr" name="date_str" value="{{ edit_fields.date_str }}" autocomplete="off"
+                                   class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100">
+                        </div>
+                        <div>
+                            <label for="store" class="mb-2 block text-sm font-semibold text-slate-700">お店・会社名</label>
+                            <input id="store" name="store" value="{{ edit_fields.store }}" autocomplete="organization"
+                                   class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100">
+                        </div>
+                        <div>
+                            <label for="category" class="mb-2 block text-sm font-semibold text-slate-700">勘定科目</label>
+                            <input id="category" name="category" value="{{ edit_fields.category }}" autocomplete="off"
+                                   class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100">
+                        </div>
+                        <div>
+                            <label for="total" class="mb-2 block text-sm font-semibold text-slate-700">合計金額</label>
+                            <input id="total" name="total" value="{{ edit_fields.total }}" inputmode="decimal" autocomplete="off"
+                                   class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100">
+                        </div>
+                    </div>
+
+                    <details class="mt-7 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <summary class="cursor-pointer text-sm font-semibold text-slate-700">商品明細・OCRテキストを編集</summary>
+                        <label for="details" class="sr-only">商品明細・OCRテキスト</label>
+                        <textarea id="details" name="details" rows="14"
+                            class="mt-4 w-full resize-y rounded-xl border border-slate-300 bg-white p-4 font-mono text-sm leading-6 text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100">{{ edit_details }}</textarea>
+                        <p class="mt-2 text-xs leading-5 text-slate-500">日付・店舗名・勘定科目・合計金額は上の入力欄が保存されます。</p>
+                    </details>
+
+                    <div id="editStatus" class="mt-5 hidden rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800" role="status">変更を保存しています…</div>
+
+                    <div class="mt-6 flex flex-col-reverse gap-3 sm:flex-row">
+                        <button type="submit"
+                            class="inline-flex min-h-12 items-center justify-center rounded-xl bg-blue-600 px-6 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200">
+                            変更を保存
+                        </button>
+                        <a href="/receipts"
+                            class="inline-flex min-h-12 items-center justify-center rounded-xl bg-slate-100 px-6 text-sm font-bold text-slate-700 transition hover:bg-slate-200 focus:outline-none focus:ring-4 focus:ring-blue-100">
+                            キャンセル
+                        </a>
+                    </div>
+                </form>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        const editForm = document.getElementById('editForm');
+        const editStatus = document.getElementById('editStatus');
+        let editDirty = false;
+        editForm?.addEventListener('input', () => { editDirty = true; });
+        editForm?.addEventListener('submit', () => {
+            editDirty = false;
+            editStatus?.classList.remove('hidden');
+        });
+        window.addEventListener('beforeunload', event => {
+            if (!editDirty) return;
+            event.preventDefault();
+            event.returnValue = '';
+        });
+    </script>
+</body>
+</html>

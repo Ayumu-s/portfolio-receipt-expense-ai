@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>経費管理Webアプリ</title>
+    <link rel="stylesheet" href="/assets/app.css">
+    <link rel="stylesheet" href="/assets/demo.css">
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-900">
+
+    {% include "_nav.html" %}
+
+    <!-- メインコンテンツ -->
+    <main class="mx-auto max-w-5xl px-4 py-12 sm:px-6 sm:py-16">
+        <div class="mx-auto max-w-2xl">
+            <p class="mb-3 text-sm font-bold tracking-[0.16em] text-blue-700">RECEIPT DESK</p>
+            <h1 class="text-3xl font-bold tracking-tight text-slate-900 sm:text-5xl">レシートを、ためずに整理する</h1>
+            <p class="mt-4 max-w-xl text-base leading-7 text-slate-600">画像を追加すると、AIが内容を読み取り、確認・修正・集計まで続けて行えます。</p>
+        </div>
+
+        <div class="mt-10 grid grid-cols-1 gap-5 md:grid-cols-2">
+            <!-- アップロードカード -->
+            <a href="/upload" class="group relative overflow-hidden rounded-3xl bg-blue-600 p-7 text-white shadow-[0_18px_45px_rgba(37,99,235,0.22)] transition hover:-translate-y-0.5 hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200 sm:p-8">
+                <div class="mb-8 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/20">
+                    <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                    </svg>
+                </div>
+                <p class="text-sm font-semibold text-blue-100">まずはこちら</p>
+                <h2 class="mt-2 text-2xl font-bold">サンプルを選んでデモ開始</h2>
+                <p class="mt-3 text-sm leading-6 text-blue-100">架空レシートを選ぶだけで、解析・編集・集計までの流れを確認できます。</p>
+                <div class="home-demo-strip" aria-label="公開デモ用レシートサンプル">
+                    <img src="/assets/demo/receipts/receipt-grocery.png" alt="食料品サンプル" fetchpriority="high">
+                    <img src="/assets/demo/receipts/receipt-cafe.png" alt="カフェサンプル" loading="lazy">
+                    <img src="/assets/demo/receipts/receipt-stationery.png" alt="文具サンプル" loading="lazy">
+                    <img src="/assets/demo/receipts/receipt-restaurant.png" alt="飲食店サンプル" loading="lazy">
+                    <img src="/assets/demo/receipts/receipt-household.png" alt="日用品サンプル" loading="lazy">
+                </div>
+                <span class="mt-6 inline-flex items-center gap-2 text-sm font-bold">サンプル選択画面へ <span aria-hidden="true">→</span></span>
+            </a>
+
+            <!-- 一覧カード -->
+            <a href="/receipts" class="group rounded-3xl border border-slate-200 bg-white p-7 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-100 sm:p-8">
+                <div class="mb-8 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 ring-1 ring-emerald-100">
+                    <svg class="h-6 w-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                    </svg>
+                </div>
+                <p class="text-sm font-semibold text-slate-500">確認・修正はこちら</p>
+                <h2 class="mt-2 text-2xl font-bold text-slate-900">レシート一覧を見る</h2>
+                <p class="mt-3 text-sm leading-6 text-slate-600">解析済みの内容を確認し、必要な項目を編集できます。</p>
+                <span class="mt-7 inline-flex items-center gap-2 text-sm font-bold text-slate-700">一覧画面へ <span aria-hidden="true">→</span></span>
+            </a>
+        </div>
+    </main>
+</body>
+</html>

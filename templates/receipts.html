@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>アップロード済みレシート一覧</title>
+    <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-900">
+
+    {% include "_nav.html" %}
+
+    <main class="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14">
+
+        {% if password_updated %}
+        <div class="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800" role="status">パスワードを変更し、ほかのログインセッションを失効しました。</div>
+        {% endif %}
+
+        <div class="mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+                <p class="mb-3 text-sm font-bold tracking-[0.16em] text-blue-700">RECEIPTS</p>
+                <h1 class="text-3xl font-bold tracking-tight text-slate-900">レシート一覧</h1>
+                <p class="mt-2 text-sm text-slate-600">解析結果を確認し、経費対象や内容を整理します。</p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <!-- エクスポートボタン -->
+                <a href="/receipts/export{% if selected_year or selected_month %}?{% endif %}{% if selected_year %}year={{ selected_year }}{% endif %}{% if selected_month %}{% if selected_year %}&{% endif %}month={{ selected_month }}{% endif %}"
+                    aria-label="表示中のレシートをZIPで書き出す"
+                    class="flex min-h-11 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600 transition-colors hover:border-emerald-300 hover:text-emerald-700 focus:outline-none focus:ring-4 focus:ring-blue-100">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                    </svg>
+                    ZIPで書き出す
+                </a>
+                <a href="/upload"
+                    class="flex min-h-11 items-center gap-1.5 rounded-xl bg-blue-600 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    レシートを追加
+                </a>
+            </div>
+        </div>
+
+        {% if portfolio_demo_mode %}
+        <div class="mb-5 flex flex-col gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900 sm:flex-row sm:items-center sm:justify-between" role="status">
+            <span class="font-bold">公開デモ用の架空データ</span>
+            <span class="text-blue-800">2024〜2026年のサンプルで、年・月フィルターを試せます。</span>
+        </div>
+        {% endif %}
+
+        <!-- フィルターパネル -->
+        <div class="mb-5 space-y-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+            {% set fp = "" %}
+            {% if selected_year %}{% set fp = fp ~ "&year=" ~ selected_year %}{% endif %}
+            {% if selected_month %}{% set fp = fp ~ "&month=" ~ selected_month %}{% endif %}
+
+            <fieldset class="flex flex-wrap items-center gap-2">
+                <legend class="w-16 shrink-0 text-xs font-bold text-slate-500">並び順</legend>
+                <a href="/receipts?sort=uploaded_at{{ fp }}"
+                    aria-current="{{ 'page' if sort != 'receipt_date' else 'false' }}"
+                    class="rounded-lg px-3 py-2 text-sm font-semibold transition-colors {{ 'bg-slate-800 text-white' if sort != 'receipt_date' else 'bg-slate-100 text-slate-600 hover:bg-slate-200' }}">
+                    アップロード順
+                </a>
+                <a href="/receipts?sort=receipt_date{{ fp }}"
+                    aria-current="{{ 'page' if sort == 'receipt_date' else 'false' }}"
+                    class="rounded-lg px-3 py-2 text-sm font-semibold transition-colors {{ 'bg-slate-800 text-white' if sort == 'receipt_date' else 'bg-slate-100 text-slate-600 hover:bg-slate-200' }}">
+                    レシート日付順
+                </a>
+            </fieldset>
+
+            <fieldset class="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
+                <legend class="w-16 shrink-0 text-xs font-bold text-slate-500">年</legend>
+                <a href="/receipts?sort={{ sort }}"
+                    aria-current="{{ 'page' if not selected_year else 'false' }}"
+                    class="rounded-lg px-3 py-2 text-sm font-semibold transition-colors {{ 'bg-blue-600 text-white' if not selected_year else 'bg-slate-100 text-slate-600 hover:bg-slate-200' }}">
+                    すべて
+                </a>
+                {% for y in available_years %}
+                <a href="/receipts?sort={{ sort }}&year={{ y }}"
+                    aria-current="{{ 'page' if selected_year == y else 'false' }}"
+                    class="rounded-lg px-3 py-2 text-sm font-semibold transition-colors {{ 'bg-blue-600 text-white' if selected_year == y else 'bg-slate-100 text-slate-600 hover:bg-slate-200' }}">
+                    {{ y }}年
+                </a>
+                {% endfor %}
+                {% if not available_years %}
+                <span class="text-xs text-slate-400">レシート日付が未登録のデータは「すべて」に含まれます。</span>
+                {% endif %}
+            </fieldset>
+
+            {% if selected_year %}
+            <fieldset class="flex flex-wrap items-center gap-2">
+                <legend class="w-16 shrink-0 text-xs font-bold text-slate-500">月</legend>
+                <a href="/receipts?sort={{ sort }}&year={{ selected_year }}"
+                    aria-current="{{ 'page' if not selected_month else 'false' }}"
+                    class="rounded-lg px-3 py-2 text-sm font-semibold transition-colors {{ 'bg-blue-600 text-white' if not selected_month else 'bg-slate-100 text-slate-600 hover:bg-slate-200' }}">
+                    すべて
+                </a>
+                {% for m in range(1, 13) %}
+                <a href="/receipts?sort={{ sort }}&year={{ selected_year }}&month={{ m }}"
+                    aria-current="{{ 'page' if selected_month == m else 'false' }}"
+                    class="rounded-lg px-3 py-2 text-sm font-semibold transition-colors {{ 'bg-blue-600 text-white' if selected_month == m else 'bg-slate-100 text-slate-600 hover:bg-slate-200' }}">
+                    {{ m }}月
+                </a>
+                {% endfor %}
+            </fieldset>
+            {% endif %}
+        </div>
+
+        <!-- 合計サマリー -->
+        {% if receipts and selected_year %}
+        <div class="mb-5 flex items-center justify-between rounded-2xl border border-blue-100 bg-blue-50 px-5 py-4">
+            <span class="text-sm font-semibold text-blue-800">
+                {{ selected_year }}年{% if selected_month %}{{ selected_month }}月{% endif %}の経費合計
+            </span>
+            <span class="text-xl font-bold tracking-tight text-slate-900">{{ year_total }}</span>
+        </div>
+        {% endif %}
+
+        <!-- 一括操作バー -->
+        {% if updated %}
+        <div class="mb-5 flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800" role="status">
+            <svg class="mt-0.5 h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            レシート内容を保存しました。
+        </div>
+        {% endif %}
+
+        {% if duplicate_count %}
+        <div class="mb-5 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800" role="status">
+            <svg class="mt-0.5 h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M10.29 3.86l-7.5 13A2 2 0 004.53 20h14.94a2 2 0 001.74-3.14l-7.5-13a2 2 0 00-3.42 0z"/></svg>
+            同じ画像のレシート{{ duplicate_count }}件は、重複のため追加登録しませんでした。
+        </div>
+        {% endif %}
+
+        <div id="bulkBar" class="hidden mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3" role="status">
+            <span id="selectedCount" class="text-sm font-semibold text-red-800">0件選択中</span>
+            <button onclick="submitDelete()"
+                type="button" aria-label="選択したレシートを削除"
+                class="min-h-11 rounded-xl bg-red-600 px-4 text-sm font-bold text-white transition hover:bg-red-700 focus:outline-none focus:ring-4 focus:ring-red-200">
+                選択したレシートを削除
+            </button>
+        </div>
+        <form id="deleteForm" method="post" action="/receipts/delete" data-csrf-token="{{ csrf_token }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        </form>
+
+        {% if receipts %}
+        <div class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+            <!-- Desktop table -->
+            <div class="hidden overflow-x-auto md:block">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="border-b border-slate-200 bg-slate-50">
+                        <th class="w-12 px-4 py-3 text-center">
+                            <input type="checkbox" id="selectAll" aria-label="すべて選択" class="h-4 w-4 cursor-pointer rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                        </th>
+                        <th class="px-4 py-3 text-left font-semibold text-slate-600">レシート日付</th>
+                        <th class="px-4 py-3 text-left font-semibold text-slate-600">店舗名</th>
+                        <th class="px-4 py-3 text-left font-semibold text-slate-600">勘定科目</th>
+                        <th class="px-4 py-3 text-right font-semibold text-slate-600">合計金額</th>
+                        <th class="px-3 py-3 text-center font-semibold text-slate-600">経費</th>
+                        <th class="hidden px-4 py-3 text-left font-semibold text-slate-600 lg:table-cell">アップロード日時</th>
+                        <th class="px-4 py-3 text-center font-semibold text-slate-600">操作</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                {% set ns = namespace(current_group='') %}
+                {% for item in receipts %}
+                    {% set needs_review = item.date_str == '－' or item.store == '－' or item.category == '－' or item.total == '－' %}
+                    {% if item.month_group != ns.current_group %}
+                    {% set ns.current_group = item.month_group %}
+                    <tr class="border-y border-blue-100 bg-blue-50">
+                        <td colspan="4" class="px-5 py-3 text-sm font-bold text-blue-800">{{ item.month_group }}</td>
+                        <td colspan="4" class="px-4 py-3 text-right text-sm font-bold text-blue-800">月合計 {{ month_totals.get(item.month_group, "－") }}</td>
+                    </tr>
+                    {% endif %}
+                    <tr class="transition-colors hover:bg-slate-50 {{ 'bg-amber-50/40' if needs_review else '' }} {{ 'opacity-60' if not item.is_expense else '' }}">
+                        <td class="px-4 py-4 text-center">
+                            <input type="checkbox" class="row-check h-4 w-4 cursor-pointer rounded border-slate-300 text-blue-600 focus:ring-blue-500" value="{{ item.id }}" aria-label="{{ item.store }}を選択">
+                        </td>
+                        <td class="cursor-pointer whitespace-nowrap px-4 py-4 font-semibold text-slate-800" onclick="toggleDetail('detail-{{ item.id }}', document.getElementById('detail-trigger-{{ item.id }}'))">
+                            {% if item.date_str == '－' %}<span class="text-amber-700">未取得</span>{% else %}{{ item.date_str }}{% endif %}
+                        </td>
+                        <td class="max-w-[220px] cursor-pointer truncate px-4 py-4 text-slate-700" onclick="toggleDetail('detail-{{ item.id }}', document.getElementById('detail-trigger-{{ item.id }}'))">
+                            {% if item.store == '－' %}<span class="text-amber-700">未取得</span>{% else %}{{ item.store }}{% endif %}
+                        </td>
+                        <td class="cursor-pointer px-4 py-4" onclick="toggleDetail('detail-{{ item.id }}', document.getElementById('detail-trigger-{{ item.id }}'))">
+                            <span class="rounded-full bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">{{ '未取得' if item.category == '－' else item.category }}</span>
+                        </td>
+                        <td class="cursor-pointer whitespace-nowrap px-4 py-4 text-right font-bold {{ 'text-slate-400 line-through' if not item.is_expense else 'text-slate-900' }}" onclick="toggleDetail('detail-{{ item.id }}', document.getElementById('detail-trigger-{{ item.id }}'))">
+                            {{ '未取得' if item.total == '－' else item.total }}
+                        </td>
+                        <td class="px-3 py-4 text-center">
+                            <form method="post" action="/receipts/{{ item.id }}/toggle-expense" class="inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <button type="submit" aria-label="{{ '経費対象。クリックで対象外に変更' if item.is_expense else '経費対象外。クリックで対象に戻す' }}"
+                                    class="inline-flex min-h-10 items-center gap-1.5 rounded-full px-3 text-xs font-bold transition-colors {{ 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' if item.is_expense else 'bg-slate-100 text-slate-500 hover:bg-slate-200' }}">
+                                    {% if item.is_expense %}<span aria-hidden="true">✓</span> 経費{% else %}<span aria-hidden="true">×</span> 対象外{% endif %}
+                                </button>
+                            </form>
+                        </td>
+                        <td class="hidden whitespace-nowrap px-4 py-4 text-xs text-slate-400 lg:table-cell">{{ item.uploaded_at | jst }}</td>
+                        <td class="whitespace-nowrap px-4 py-4 text-center">
+                            <a href="/receipts/{{ item.id }}/edit" class="inline-flex min-h-10 items-center rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-600 transition hover:border-blue-300 hover:text-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100">編集</a>
+                            <button id="detail-trigger-{{ item.id }}" type="button" onclick="toggleDetail('detail-{{ item.id }}', this)" aria-expanded="false" aria-controls="detail-{{ item.id }}" class="ml-1 inline-flex min-h-10 items-center rounded-lg px-2 text-xs font-bold text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-100">
+                                詳細
+                                <svg id="arrow-{{ item.id }}" class="ml-1 h-4 w-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                            </button>
+                        </td>
+                    </tr>
+                    <tr id="detail-{{ item.id }}" class="hidden bg-slate-50">
+                        <td colspan="8" class="px-6 py-5">
+                            <div class="flex flex-col gap-4 md:flex-row">
+                                <button type="button" class="shrink-0 text-left focus:outline-none focus:ring-4 focus:ring-blue-100" onclick="openImage('/receipts/{{ item.id }}/image')">
+                                    <img src="/receipts/{{ item.id }}/image" alt="{{ item.filename }}" class="h-40 w-auto rounded-xl border border-slate-200 object-contain shadow-sm transition hover:opacity-80">
+                                    <span class="mt-2 block text-center text-xs font-semibold text-blue-700">画像を拡大</span>
+                                </button>
+                                <pre class="min-w-0 flex-1 overflow-auto whitespace-pre-wrap rounded-2xl border border-slate-200 bg-white p-4 font-sans text-xs leading-6 text-slate-700">{{ item.result }}</pre>
+                            </div>
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            </div>
+
+            <!-- Mobile cards -->
+            <div class="md:hidden">
+                <div class="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-3">
+                    <span class="text-xs font-semibold text-slate-500">カード表示</span>
+                    <label class="flex min-h-10 items-center gap-2 text-xs font-bold text-slate-600"><input type="checkbox" id="selectAllMobile" aria-label="すべて選択" class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500">全選択</label>
+                </div>
+                {% set mobile_ns = namespace(current_group='') %}
+                {% for item in receipts %}
+                    {% set needs_review = item.date_str == '－' or item.store == '－' or item.category == '－' or item.total == '－' %}
+                    {% if item.month_group != mobile_ns.current_group %}
+                    {% set mobile_ns.current_group = item.month_group %}
+                    <div class="flex items-center justify-between border-y border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-800"><span>{{ item.month_group }}</span><span>{{ month_totals.get(item.month_group, "－") }}</span></div>
+                    {% endif %}
+                    <article class="border-b border-slate-100 px-4 py-5 {{ 'bg-amber-50/40' if needs_review else '' }} {{ 'opacity-60' if not item.is_expense else '' }}">
+                        <div class="flex items-start justify-between gap-3">
+                            <label class="flex min-w-0 items-start gap-3">
+                                <input type="checkbox" class="row-check mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500" value="{{ item.id }}" aria-label="{{ item.store }}を選択">
+                                <span class="min-w-0"><span class="block text-xs font-semibold text-slate-500">レシート日付</span><span class="mt-1 block truncate text-sm font-bold text-slate-900">{{ '未取得' if item.date_str == '－' else item.date_str }}</span></span>
+                            </label>
+                            <span class="shrink-0 text-lg font-bold {{ 'text-slate-400 line-through' if not item.is_expense else 'text-slate-900' }}">{{ '未取得' if item.total == '－' else item.total }}</span>
+                        </div>
+                        <div class="mt-4 grid grid-cols-[1fr_auto] items-end gap-3">
+                            <div class="min-w-0"><p class="text-xs font-semibold text-slate-500">店舗名</p><p class="mt-1 truncate text-sm font-semibold text-slate-700">{{ '未取得' if item.store == '－' else item.store }}</p></div>
+                            <span class="rounded-full bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">{{ '未取得' if item.category == '－' else item.category }}</span>
+                        </div>
+                        {% if needs_review %}<p class="mt-3 text-xs font-semibold text-amber-700">読み取り内容を確認してください</p>{% endif %}
+                        <div class="mt-4 flex flex-wrap items-center gap-2">
+                            <form method="post" action="/receipts/{{ item.id }}/toggle-expense" class="inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <button type="submit" aria-label="{{ '経費対象。クリックで対象外に変更' if item.is_expense else '経費対象外。クリックで対象に戻す' }}" class="inline-flex min-h-11 items-center rounded-xl px-3 text-xs font-bold {{ 'bg-emerald-50 text-emerald-700' if item.is_expense else 'bg-slate-100 text-slate-500' }}">{{ '経費対象' if item.is_expense else '対象外' }}</button>
+                            </form>
+                            <a href="/receipts/{{ item.id }}/edit" class="inline-flex min-h-11 items-center rounded-xl border border-slate-200 px-3 text-xs font-bold text-slate-600">編集</a>
+                            <button type="button" onclick="toggleDetail('detail-mobile-{{ item.id }}', this)" aria-expanded="false" aria-controls="detail-mobile-{{ item.id }}" class="inline-flex min-h-11 items-center rounded-xl border border-slate-200 px-3 text-xs font-bold text-slate-600">詳細</button>
+                        </div>
+                        <div id="detail-mobile-{{ item.id }}" class="mt-4 hidden rounded-2xl border border-slate-200 bg-white p-3">
+                            <button type="button" class="w-full text-left focus:outline-none focus:ring-4 focus:ring-blue-100" onclick="openImage('/receipts/{{ item.id }}/image')">
+                                <img src="/receipts/{{ item.id }}/image" alt="{{ item.filename }}" class="max-h-64 w-full rounded-xl object-contain">
+                                <span class="mt-2 block text-center text-xs font-semibold text-blue-700">画像を拡大</span>
+                            </button>
+                            <pre class="mt-3 max-h-72 overflow-auto whitespace-pre-wrap border-t border-slate-100 pt-3 font-sans text-xs leading-6 text-slate-700">{{ item.result }}</pre>
+                        </div>
+                    </article>
+                {% endfor %}
+            </div>
+        </div>
+        <p class="mt-3 text-right text-xs text-slate-400">{{ receipts | length }} 件</p>
+
+        {% else %}
+        <div class="rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-20 text-center text-slate-500">
+            <svg class="mx-auto mb-4 h-14 w-14 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            <p class="text-lg font-semibold text-slate-700">該当するレシートがありません</p>
+            <p class="mt-2 text-sm">条件を変えるか、新しいレシートを追加してください。</p>
+            <a href="/upload" class="mt-6 inline-flex min-h-11 items-center justify-center rounded-xl bg-blue-600 px-5 text-sm font-bold text-white transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200">
+                レシートを追加
+            </a>
+        </div>
+        {% endif %}
+
+    </main>
+
+    <!-- 画像モーダル -->
+    <div id="imageModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/85 p-4" role="dialog" aria-modal="true" aria-labelledby="imageModalTitle" onclick="if (event.target === this) closeImage()">
+        <div class="relative max-h-full max-w-4xl rounded-3xl bg-slate-900/40 p-2">
+            <p id="imageModalTitle" class="sr-only">レシート画像の拡大表示</p>
+            <img id="modalImage" src="" alt="レシート拡大" class="max-h-[88vh] max-w-full rounded-2xl object-contain shadow-2xl">
+            <button id="modalClose" type="button" onclick="closeImage()" aria-label="画像を閉じる"
+                class="absolute -right-2 -top-2 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white text-slate-600 shadow-md transition hover:text-slate-900 focus:outline-none focus:ring-4 focus:ring-blue-200">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let lastFocusedElement = null;
+        function toggleDetail(targetId, trigger) {
+            const detail = document.getElementById(targetId);
+            if (!detail) return;
+            const isOpen = detail.classList.toggle('hidden') === false;
+            trigger?.setAttribute('aria-expanded', String(isOpen));
+            const arrow = trigger?.querySelector('svg');
+            if (arrow) arrow.style.transform = isOpen ? 'rotate(180deg)' : '';
+        }
+        function openImage(src) {
+            lastFocusedElement = document.activeElement;
+            document.getElementById('modalImage').src = src;
+            const modal = document.getElementById('imageModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            document.body.style.overflow = 'hidden';
+            document.getElementById('modalClose').focus();
+        }
+        function closeImage() {
+            const modal = document.getElementById('imageModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            document.body.style.overflow = '';
+            lastFocusedElement?.focus?.();
+        }
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') closeImage(); });
+
+        const bulkBar = document.getElementById('bulkBar');
+        const selectedCount = document.getElementById('selectedCount');
+        const selectAllControls = [...document.querySelectorAll('#selectAll, #selectAllMobile')];
+        function updateBulkBar() {
+            const allRows = [...document.querySelectorAll('.row-check')];
+            const allIds = new Set(allRows.map(cb => cb.value));
+            const checkedIds = new Set(allRows.filter(cb => cb.checked).map(cb => cb.value));
+            bulkBar.classList.toggle('hidden', checkedIds.size === 0);
+            selectedCount.textContent = checkedIds.size + '件選択中';
+            selectAllControls.forEach(control => {
+                control.checked = allIds.size > 0 && checkedIds.size === allIds.size;
+                control.indeterminate = checkedIds.size > 0 && checkedIds.size < allIds.size;
+            });
+        }
+        selectAllControls.forEach(control => control.addEventListener('change', function () {
+            document.querySelectorAll('.row-check').forEach(cb => cb.checked = this.checked);
+            updateBulkBar();
+        }));
+        document.querySelectorAll('.row-check').forEach(cb => cb.addEventListener('change', updateBulkBar));
+        function submitDelete() {
+            const selectedIds = [...new Set([...document.querySelectorAll('.row-check:checked')].map(cb => cb.value))];
+            if (selectedIds.length === 0) return;
+            if (!confirm(selectedIds.length + '件のレシートを削除しますか？この操作は取り消せません。')) return;
+            const form = document.getElementById('deleteForm');
+            form.innerHTML = '';
+            const csrf = document.createElement('input');
+            csrf.type = 'hidden';
+            csrf.name = 'csrf_token';
+            csrf.value = form.dataset.csrfToken;
+            form.appendChild(csrf);
+            selectedIds.forEach(id => {
+                const input = document.createElement('input');
+                input.type = 'hidden'; input.name = 'ids'; input.value = id;
+                form.appendChild(input);
+            });
+            form.submit();
+        }
+    </script>
+
+</body>
+</html>

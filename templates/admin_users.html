@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ユーザー管理</title>
+    <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-900">
+    {% include "_nav.html" %}
+    <main class="mx-auto max-w-5xl px-4 py-10 sm:px-6 sm:py-14">
+        <div class="mb-8">
+            <p class="text-sm font-bold tracking-[0.16em] text-blue-700">CONTROLLED ACCESS</p>
+            <h1 class="mt-3 text-3xl font-bold tracking-tight">ユーザー管理</h1>
+            <p class="mt-2 text-sm leading-6 text-slate-600">登録は一度だけ使える招待リンク経由に限定されています。</p>
+        </div>
+
+        {% if error %}<div class="mb-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">{{ error }}</div>{% endif %}
+        {% if invite_url %}
+        <section class="mb-6 rounded-3xl border border-emerald-200 bg-emerald-50 p-5 sm:p-6" aria-labelledby="inviteCreatedTitle">
+            <h2 id="inviteCreatedTitle" class="font-bold text-emerald-950">招待リンクを発行しました</h2>
+            <p class="mt-1 text-sm text-emerald-800">{{ invite_email }} へ安全な方法で共有してください。この画面を離れるとリンクは再表示できません。</p>
+            <div class="mt-4 flex flex-col gap-2 sm:flex-row">
+                <input id="invitePath" type="text" readonly value="{{ invite_url }}" class="min-w-0 flex-1 rounded-xl border border-emerald-300 bg-white px-3 py-2.5 text-xs text-slate-700">
+                <button id="copyInvite" type="button" class="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-800">招待URLをコピー</button>
+            </div>
+            <p id="copyStatus" class="mt-2 text-xs text-emerald-800" aria-live="polite"></p>
+        </section>
+        {% endif %}
+
+        <div class="grid gap-6 lg:grid-cols-[0.9fr_1.4fr]">
+            <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                <h2 class="text-lg font-bold">新しい招待</h2>
+                <p class="mt-1 text-xs leading-5 text-slate-500">リンクは7日間有効で、一度登録すると無効になります。</p>
+                <form method="post" action="/admin/invitations" class="mt-5 space-y-4">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <div>
+                        <label for="inviteEmail" class="mb-1 block text-sm font-medium text-slate-700">招待するメールアドレス</label>
+                        <input id="inviteEmail" name="email" type="email" autocomplete="email" maxlength="320" required class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100">
+                    </div>
+                    <button type="submit" class="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-700">招待リンクを発行</button>
+                </form>
+
+                <div class="mt-7 border-t border-slate-100 pt-5">
+                    <h3 class="text-sm font-bold text-slate-700">有効な招待</h3>
+                    <div class="mt-3 space-y-2">
+                        {% for invite in invitations %}
+                        <div class="rounded-xl bg-slate-50 px-3 py-2 text-xs">
+                            <p class="font-semibold text-slate-700">{{ invite.email }}</p>
+                            <p class="mt-0.5 text-slate-500">期限 {{ invite.expires_at | jst }}</p>
+                        </div>
+                        {% else %}
+                        <p class="text-xs text-slate-400">有効な招待はありません。</p>
+                        {% endfor %}
+                    </div>
+                </div>
+            </section>
+
+            <section class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+                <div class="border-b border-slate-100 px-5 py-4 sm:px-6"><h2 class="text-lg font-bold">登録ユーザー</h2></div>
+                <div class="divide-y divide-slate-100">
+                    {% for user in users %}
+                    <div class="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                        <div class="min-w-0">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <p class="font-bold text-slate-800">{{ user.username }}</p>
+                                <span class="rounded-full px-2 py-0.5 text-[11px] font-bold {{ 'bg-blue-50 text-blue-700' if user.role == 'admin' else 'bg-slate-100 text-slate-600' }}">{{ '管理者' if user.role == 'admin' else 'ユーザー' }}</span>
+                                <span class="rounded-full px-2 py-0.5 text-[11px] font-bold {{ 'bg-emerald-50 text-emerald-700' if user.is_active else 'bg-red-50 text-red-700' }}">{{ '有効' if user.is_active else '停止中' }}</span>
+                            </div>
+                            <p class="mt-1 truncate text-sm text-slate-500">{{ user.email }}</p>
+                        </div>
+                        {% if user.id != current_user.id %}
+                        <form method="post" action="/admin/users/{{ user.id }}/toggle-active">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <button type="submit" class="min-h-10 rounded-xl border px-3 text-xs font-bold {{ 'border-red-200 text-red-700 hover:bg-red-50' if user.is_active else 'border-emerald-200 text-emerald-700 hover:bg-emerald-50' }}">{{ '利用停止' if user.is_active else '再開' }}</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </section>
+        </div>
+    </main>
+    <script>
+        const copyButton = document.getElementById('copyInvite');
+        copyButton?.addEventListener('click', async () => {
+            const path = document.getElementById('invitePath')?.value || '';
+            const status = document.getElementById('copyStatus');
+            try {
+                await navigator.clipboard.writeText(`${window.location.origin}${path}`);
+                if (status) status.textContent = 'コピーしました。';
+            } catch {
+                if (status) status.textContent = 'コピーできませんでした。URL欄を選択してコピーしてください。';
+            }
+        });
+    </script>
+</body>
+</html>
