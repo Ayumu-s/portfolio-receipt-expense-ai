@@ -53,6 +53,8 @@ New-Item -ItemType Directory -Force .runtime | Out-Null
 
 ## Vercel公開デモ
 
+[Receipt Expense AI デモ](https://portfolio-receipt-expense-ai.vercel.app/)
+
 `api/index.py` をVercel Functionsの入口として使用します。Vercel上では`PORTFOLIO_DEMO_MODE=true`と一時SQLiteを使用するため、登録・編集データはデプロイ環境に永続保存されません。公開デモは架空データ専用です。
 
 VercelのProject Rootはリポジトリ直下に設定し、Productionの公開URLをこの章の先頭に追加します。
