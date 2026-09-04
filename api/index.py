@@ -1,7 +1,6 @@
 """Vercel entrypoint for the portfolio FastAPI demo."""
 
 import os
-import secrets
 import tempfile
 from pathlib import Path
 
@@ -19,7 +18,11 @@ os.environ["DATABASE_URL"] = f"sqlite:///{runtime_db_path.as_posix()}"
 os.environ["PORTFOLIO_DEMO_MODE"] = "true"
 os.environ["APP_ENV"] = "development"
 os.environ["COOKIE_SECURE"] = "true"
-os.environ["SESSION_SECRET"] = secrets.token_urlsafe(32)
+# Keep the public Mock session signature stable across Vercel instances so a
+# CSRF token generated on the upload page can be verified on form submission.
+# This is intentionally a demo-only key; the public deployment has no real
+# user accounts or private data and must not be used as a production service.
+os.environ["SESSION_SECRET"] = "portfolio-demo-session-secret-not-for-production-2026"
 # Vercel can retain blank variables imported from a local environment file.
 # Set every value parsed during module import so an empty dashboard variable
 # cannot prevent the public Mock demo from starting.
