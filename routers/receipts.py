@@ -7,6 +7,7 @@ import mimetypes
 import os
 import re
 import secrets
+import tempfile
 import uuid
 import zipfile
 from datetime import date, datetime, timedelta, timezone
@@ -62,8 +63,14 @@ def _to_jst(dt) -> str:
 
 templates.env.filters["jst"] = _to_jst
 
-PRIVATE_UPLOAD_FOLDER = "storage/uploads"
-LEGACY_UPLOAD_FOLDER = "static/uploads"
+if PORTFOLIO_DEMO_MODE:
+    # Vercel's deployed bundle is read-only; only /tmp is writable.
+    demo_storage_root = Path(tempfile.gettempdir()) / "receipt-expense-ai"
+    PRIVATE_UPLOAD_FOLDER = str(demo_storage_root / "uploads")
+    LEGACY_UPLOAD_FOLDER = str(demo_storage_root / "legacy-uploads")
+else:
+    PRIVATE_UPLOAD_FOLDER = "storage/uploads"
+    LEGACY_UPLOAD_FOLDER = "static/uploads"
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(10 * 1024 * 1024)))
 MAX_FILES_PER_UPLOAD = int(os.getenv("MAX_FILES_PER_UPLOAD", "10"))
 MAX_CONCURRENT_ANALYSES = max(1, int(os.getenv("MAX_CONCURRENT_ANALYSES", "5")))
