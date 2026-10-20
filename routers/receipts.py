@@ -16,8 +16,7 @@ from urllib.parse import quote
 
 import openpyxl
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
-from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
-from fastapi.templating import Jinja2Templates
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from openpyxl.styles import Alignment, Font, PatternFill
 from PIL import Image, ImageOps, UnidentifiedImageError
 import pillow_heif
@@ -50,9 +49,7 @@ from services.mock_analysis import MOCK_RESULT, MOCK_RESULTS_BY_FILENAME, analyz
 JST = timezone(timedelta(hours=9))
 
 router = APIRouter()
-templates = Jinja2Templates(directory="templates")
 PORTFOLIO_DEMO_MODE = os.getenv("PORTFOLIO_DEMO_MODE", "false").lower() == "true" and os.getenv("APP_ENV", "development").lower() != "test"
-templates.env.globals["portfolio_demo_mode"] = PORTFOLIO_DEMO_MODE
 
 
 def _to_jst(dt) -> str:
@@ -60,8 +57,6 @@ def _to_jst(dt) -> str:
         return ""
     return dt.replace(tzinfo=timezone.utc).astimezone(JST).strftime("%Y/%m/%d %H:%M")
 
-
-templates.env.filters["jst"] = _to_jst
 
 if PORTFOLIO_DEMO_MODE:
     # Vercel's deployed bundle is read-only; only /tmp is writable.
@@ -109,15 +104,10 @@ def get_csrf_token(request: Request) -> str:
 
 
 def validate_csrf(request: Request, csrf_token: str) -> None:
+    csrf_token = csrf_token or request.headers.get("x-csrf-token", "")
     session_token = request.session.get("csrf_token")
     if not csrf_token or not session_token or not secrets.compare_digest(csrf_token, session_token):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="不正なリクエストです。ページを再読み込みしてやり直してください。")
-
-
-def render_template(request: Request, template_name: str, context: dict | None = None, status_code: int = 200):
-    merged = dict(context or {})
-    merged["csrf_token"] = get_csrf_token(request)
-    return templates.TemplateResponse(request, template_name, merged, status_code=status_code)
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"error": "不正なリクエストです。ページを再読み込みしてやり直してください。", "code": "csrf_failed"})
 
 
 def get_portfolio_demo_user(db: Session) -> User | None:
@@ -133,14 +123,18 @@ def ensure_authenticated(request: Request, db: Session) -> User:
     user = get_portfolio_demo_user(db) if PORTFOLIO_DEMO_MODE else get_authenticated_user(db, request)
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_303_SEE_OTHER,
-            detail="ログインが必要です。",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"error": "ログインが必要です。", "code": "authentication_required"},
             headers={"Location": "/login"},
         )
-    if user.must_change_password and request.url.path not in {"/account/password", "/logout"}:
+    if user.must_change_password and request.url.path not in {"/api/account/password", "/api/logout"}:
         raise HTTPException(
-            status_code=status.HTTP_303_SEE_OTHER,
-            detail="パスワードの変更が必要です。",
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "パスワードの変更が必要です。",
+                "code": "password_change_required",
+                "redirect_url": "/account/password",
+            },
             headers={"Location": "/account/password"},
         )
     return user
@@ -148,7 +142,10 @@ def ensure_authenticated(request: Request, db: Session) -> User:
 
 def ensure_admin(request: Request, db: Session) -> User:
     if PORTFOLIO_DEMO_MODE:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="この画面は公開デモでは使用しません。")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": "この機能は公開デモでは使用できません。", "code": "demo_capability_disabled"},
+        )
     user = ensure_authenticated(request, db)
     if user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="管理者権限が必要です。")
@@ -462,6 +459,61 @@ def build_receipt_data(receipts_raw: list[Receipt]) -> list[dict]:
     return result
 
 
+def serialize_datetime_utc(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def serialize_user(user: User, *, include_admin_fields: bool = False) -> dict:
+    public = {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "role": user.role,
+        "must_change_password": bool(user.must_change_password),
+    }
+    if include_admin_fields:
+        public.update(
+            {
+                "is_active": bool(user.is_active),
+                "created_at": serialize_datetime_utc(user.created_at),
+                "last_login_at": serialize_datetime_utc(user.last_login_at),
+            }
+        )
+    return public
+
+
+def serialize_receipt(receipt: dict) -> dict:
+    return {
+        "id": receipt["id"],
+        "filename": receipt["filename"],
+        "uploaded_at": serialize_datetime_utc(receipt["uploaded_at"]),
+        "receipt_date": receipt["receipt_date"].isoformat() if receipt["receipt_date"] else None,
+        "result": receipt["result"],
+        "month_group": receipt["month_group"],
+        "is_expense": bool(receipt["is_expense"]),
+        "total_int": receipt["total_int"],
+        "date_str": receipt["date_str"],
+        "store": receipt["store"],
+        "category": receipt["category"],
+        "total": receipt["total"],
+    }
+
+
+def validate_receipt_filters(year: int | None, month: int | None, sort: str | None = None) -> str:
+    if year is not None and not 1900 <= year <= 2200:
+        raise HTTPException(status_code=400, detail={"error": "年の指定が正しくありません。", "code": "invalid_year"})
+    if month is not None and not 1 <= month <= 12:
+        raise HTTPException(status_code=400, detail={"error": "月の指定が正しくありません。", "code": "invalid_month"})
+    normalized_sort = sort or "uploaded_at"
+    if normalized_sort not in {"uploaded_at", "receipt_date"}:
+        raise HTTPException(status_code=400, detail={"error": "並び順の指定が正しくありません。", "code": "invalid_sort"})
+    return normalized_sort
+
+
 def compute_totals(receipts_data: list[dict]) -> tuple[str, dict]:
     year_sum = 0
     month_sums: dict[str, int] = {}
@@ -491,16 +543,27 @@ def get_available_years(db: Session, owner_id: int) -> list[int]:
 
 # ─────────────────────────── Auth ───────────────────────────
 
-@router.get("/login")
-async def login_page(request: Request, db: Session = Depends(get_db), registered: int = Query(default=0)):
-    if PORTFOLIO_DEMO_MODE:
-        return RedirectResponse(url="/", status_code=303)
-    if get_authenticated_user(db, request):
-        return RedirectResponse(url="/receipts", status_code=303)
-    return render_template(request, "login.html", {"registered": bool(registered)})
+@router.get("/api/session")
+async def api_session(request: Request, db: Session = Depends(get_db)):
+    user = get_portfolio_demo_user(db) if PORTFOLIO_DEMO_MODE else get_authenticated_user(db, request)
+    samples = [
+        {"filename": filename, "label": label, "image_url": f"/assets/demo/receipts/{asset_filename}"}
+        for (filename, asset_filename), label in zip(
+            PORTFOLIO_DEMO_SAMPLE_FILES,
+            ("スーパーのレシート", "カフェのレシート", "文具店のレシート", "飲食店のレシート", "日用品のレシート"),
+        )
+    ] if PORTFOLIO_DEMO_MODE else []
+    return {
+        "user": serialize_user(user) if user else None,
+        "csrf_token": get_csrf_token(request),
+        "demo_mode": PORTFOLIO_DEMO_MODE,
+        "max_files_per_upload": MAX_FILES_PER_UPLOAD,
+        "max_upload_bytes": MAX_UPLOAD_BYTES,
+        "samples": samples,
+    }
 
 
-@router.post("/login")
+@router.post("/api/login")
 async def login(
     request: Request,
     identifier: str = Form(...),
@@ -508,25 +571,26 @@ async def login(
     csrf_token: str = Form(default=""),
     db: Session = Depends(get_db),
 ):
+    if PORTFOLIO_DEMO_MODE:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": "この機能は公開デモでは使用できません。", "code": "demo_capability_disabled"},
+        )
     validate_csrf(request, csrf_token)
     identifier = (identifier or "").strip()[:320]
     if login_is_rate_limited(db, request, identifier):
-        return render_template(
-            request,
-            "login.html",
-            {"error": "ログイン試行回数が多すぎます。10分ほど待ってから再試行してください。"},
+        raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={"error": "ログイン試行回数が多すぎます。10分ほど待ってから再試行してください。", "code": "rate_limited"},
         )
 
     user = authenticate_user(db, identifier, password)
     if not user:
         record_security_event(db, "login_failure", request, identifier=identifier)
         db.commit()
-        return render_template(
-            request,
-            "login.html",
-            {"error": "ログイン情報が正しくありません。"},
+        raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"error": "ログイン情報が正しくありません。", "code": "invalid_credentials"},
         )
 
     request.session.clear()
@@ -536,35 +600,31 @@ async def login(
     record_security_event(db, "login_success", request, user_id=user.id)
     db.commit()
     destination = "/account/password" if user.must_change_password else "/receipts"
-    response = RedirectResponse(url=destination, status_code=303)
+    response = JSONResponse({"ok": True, "redirect_url": destination, "csrf_token": request.session["csrf_token"]})
     set_auth_cookie(response, raw_token)
     return response
 
 
-@router.post("/logout")
+@router.post("/api/logout")
 async def logout(request: Request, csrf_token: str = Form(default=""), db: Session = Depends(get_db)):
     if PORTFOLIO_DEMO_MODE:
-        return RedirectResponse(url="/", status_code=303)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": "この機能は公開デモでは使用できません。", "code": "demo_capability_disabled"},
+        )
     user = ensure_authenticated(request, db)
     validate_csrf(request, csrf_token)
     revoke_current_session(db, request)
     record_security_event(db, "logout", request, user_id=user.id)
     db.commit()
     request.session.clear()
-    response = RedirectResponse(url="/login", status_code=303)
+    refreshed_csrf = get_csrf_token(request)
+    response = JSONResponse({"ok": True, "redirect_url": "/login", "csrf_token": refreshed_csrf})
     clear_auth_cookie(response)
     return response
 
 
-@router.get("/account/password")
-async def change_password_page(request: Request, db: Session = Depends(get_db)):
-    if PORTFOLIO_DEMO_MODE:
-        return RedirectResponse(url="/", status_code=303)
-    user = ensure_authenticated(request, db)
-    return render_template(request, "change_password.html", {"current_user": user})
-
-
-@router.post("/account/password")
+@router.post("/api/account/password")
 async def change_password(
     request: Request,
     current_password: str = Form(...),
@@ -573,37 +633,36 @@ async def change_password(
     csrf_token: str = Form(default=""),
     db: Session = Depends(get_db),
 ):
+    if PORTFOLIO_DEMO_MODE:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": "この機能は公開デモでは使用できません。", "code": "demo_capability_disabled"},
+        )
     user = ensure_authenticated(request, db)
     validate_csrf(request, csrf_token)
     if not authenticate_user(db, user.username, current_password):
-        return render_template(
-            request,
-            "change_password.html",
-            {"current_user": user, "error": "現在のパスワードが正しくありません。"},
+        raise HTTPException(
             status_code=400,
+            detail={"error": "現在のパスワードが正しくありません。", "code": "invalid_current_password"},
         )
     if new_password != new_password_confirm:
-        return render_template(
-            request,
-            "change_password.html",
-            {"current_user": user, "error": "新しいパスワードが一致しません。"},
+        raise HTTPException(
             status_code=400,
+            detail={"error": "新しいパスワードが一致しません。", "code": "password_mismatch"},
         )
     try:
         user.password_hash = hash_password(new_password)
     except ValueError as exc:
-        return render_template(
-            request,
-            "change_password.html",
-            {"current_user": user, "error": str(exc)},
+        raise HTTPException(
             status_code=400,
+            detail={"error": str(exc), "code": "invalid_password"},
         )
     user.must_change_password = False
     revoke_all_user_sessions(db, user.id)
     raw_token = create_user_session(db, user, request)
     record_security_event(db, "password_changed", request, user_id=user.id)
     db.commit()
-    response = RedirectResponse(url="/receipts?password_updated=1", status_code=303)
+    response = JSONResponse({"ok": True, "redirect_url": "/receipts?password_updated=1"})
     set_auth_cookie(response, raw_token)
     return response
 
@@ -622,22 +681,23 @@ def get_valid_invitation(db: Session, raw_token: str) -> Invitation | None:
     )
 
 
-@router.get("/register")
-async def register_page(request: Request, token: str = Query(default=""), db: Session = Depends(get_db)):
+@router.get("/api/register")
+async def register_info(token: str = Query(default=""), db: Session = Depends(get_db)):
     if PORTFOLIO_DEMO_MODE:
-        return RedirectResponse(url="/", status_code=303)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": "この機能は公開デモでは使用できません。", "code": "demo_capability_disabled"},
+        )
     invitation = get_valid_invitation(db, token)
     if not invitation:
-        return render_template(
-            request,
-            "register.html",
-            {"invalid_invitation": True},
+        raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "この招待リンクは利用できません。", "code": "invalid_invitation"},
         )
-    return render_template(request, "register.html", {"invitation": invitation, "invite_token": token})
+    return {"email": invitation.email, "invite_token": token}
 
 
-@router.post("/register")
+@router.post("/api/register")
 async def register(
     request: Request,
     invite_token: str = Form(...),
@@ -647,14 +707,17 @@ async def register(
     csrf_token: str = Form(default=""),
     db: Session = Depends(get_db),
 ):
+    if PORTFOLIO_DEMO_MODE:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": "この機能は公開デモでは使用できません。", "code": "demo_capability_disabled"},
+        )
     validate_csrf(request, csrf_token)
     invitation = get_valid_invitation(db, invite_token)
     if not invitation:
-        return render_template(
-            request,
-            "register.html",
-            {"invalid_invitation": True},
+        raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "この招待リンクは利用できません。", "code": "invalid_invitation"},
         )
     try:
         username_display, username_normalized = normalize_username(username)
@@ -663,12 +726,7 @@ async def register(
         if password != password_confirm:
             raise ValueError("パスワードが一致しません。")
     except ValueError as exc:
-        return render_template(
-            request,
-            "register.html",
-            {"invitation": invitation, "invite_token": invite_token, "error": str(exc), "entered_username": username},
-            status_code=400,
-        )
+        raise HTTPException(status_code=400, detail={"error": str(exc), "code": "invalid_registration"})
 
     if db.query(User.id).filter(User.username_normalized == username_normalized).first():
         error = "このユーザー名は使用できません。"
@@ -677,12 +735,7 @@ async def register(
     else:
         error = None
     if error:
-        return render_template(
-            request,
-            "register.html",
-            {"invitation": invitation, "invite_token": invite_token, "error": error, "entered_username": username},
-            status_code=400,
-        )
+        raise HTTPException(status_code=400, detail={"error": error, "code": "registration_conflict"})
 
     user = User(
         username=username_display,
@@ -700,21 +753,14 @@ async def register(
         db.commit()
     except IntegrityError:
         db.rollback()
-        return render_template(
-            request,
-            "register.html",
-            {
-                "invitation": invitation,
-                "invite_token": invite_token,
-                "error": "登録情報が既に使用されています。管理者へ確認してください。",
-                "entered_username": username,
-            },
+        raise HTTPException(
             status_code=409,
+            detail={"error": "登録情報が既に使用されています。管理者へ確認してください。", "code": "registration_conflict"},
         )
-    return RedirectResponse(url="/login?registered=1", status_code=303)
+    return {"ok": True, "redirect_url": "/login?registered=1"}
 
 
-@router.get("/admin/users")
+@router.get("/api/admin/users")
 async def admin_users(request: Request, db: Session = Depends(get_db)):
     current_user = ensure_admin(request, db)
     users = db.query(User).order_by(User.created_at.asc()).all()
@@ -724,14 +770,21 @@ async def admin_users(request: Request, db: Session = Depends(get_db)):
         .order_by(Invitation.created_at.desc())
         .all()
     )
-    return render_template(
-        request,
-        "admin_users.html",
-        {"current_user": current_user, "users": users, "invitations": invitations},
-    )
+    return {
+        "users": [serialize_user(user, include_admin_fields=True) for user in users],
+        "invitations": [
+            {
+                "id": invitation.id,
+                "email": invitation.email,
+                "created_at": serialize_datetime_utc(invitation.created_at),
+                "expires_at": serialize_datetime_utc(invitation.expires_at),
+            }
+            for invitation in invitations
+        ],
+    }
 
 
-@router.post("/admin/invitations")
+@router.post("/api/admin/invitations")
 async def create_invitation(
     request: Request,
     email: str = Form(...),
@@ -743,55 +796,38 @@ async def create_invitation(
     try:
         email_display, email_normalized = normalize_email(email)
     except ValueError as exc:
-        return render_template(
-            request,
-            "admin_users.html",
-            {
-                "current_user": current_user,
-                "users": db.query(User).order_by(User.created_at.asc()).all(),
-                "invitations": db.query(Invitation).filter(Invitation.used_at.is_(None), Invitation.expires_at > utcnow()).all(),
-                "error": str(exc),
-            },
-            status_code=400,
-        )
+        raise HTTPException(status_code=400, detail={"error": str(exc), "code": "invalid_email"})
     if db.query(User.id).filter(User.email_normalized == email_normalized).first():
-        error = "このメールアドレスは既に登録されています。"
-        return render_template(
-            request,
-            "admin_users.html",
-            {
-                "current_user": current_user,
-                "users": db.query(User).order_by(User.created_at.asc()).all(),
-                "invitations": db.query(Invitation).filter(Invitation.used_at.is_(None), Invitation.expires_at > utcnow()).all(),
-                "error": error,
-            },
+        raise HTTPException(
             status_code=400,
+            detail={"error": "このメールアドレスは既に登録されています。", "code": "email_already_registered"},
         )
+    now = utcnow()
+    db.query(Invitation).filter(
+        Invitation.email_normalized == email_normalized,
+        Invitation.used_at.is_(None),
+        Invitation.expires_at > now,
+    ).update({Invitation.expires_at: now}, synchronize_session=False)
     raw_token = secrets.token_urlsafe(40)
     invitation = Invitation(
         email=email_display,
         email_normalized=email_normalized,
         token_hash=token_hash(raw_token),
         created_by_id=current_user.id,
-        expires_at=utcnow() + timedelta(hours=INVITATION_VALID_HOURS),
+        expires_at=now + timedelta(hours=INVITATION_VALID_HOURS),
     )
     db.add(invitation)
     record_security_event(db, "invitation_created", request, user_id=current_user.id)
     db.commit()
-    return render_template(
-        request,
-        "admin_users.html",
-        {
-            "current_user": current_user,
-            "users": db.query(User).order_by(User.created_at.asc()).all(),
-            "invitations": db.query(Invitation).filter(Invitation.used_at.is_(None), Invitation.expires_at > utcnow()).all(),
-            "invite_url": f"/register?token={quote(raw_token)}",
-            "invite_email": email_display,
-        },
-    )
+    return {
+        "ok": True,
+        "invite_url": f"/register?token={quote(raw_token)}",
+        "invite_email": email_display,
+        "csrf_token": get_csrf_token(request),
+    }
 
 
-@router.post("/admin/users/{user_id}/toggle-active")
+@router.post("/api/admin/users/{user_id}/toggle-active")
 async def toggle_user_active(
     user_id: int,
     request: Request,
@@ -810,45 +846,19 @@ async def toggle_user_active(
         revoke_all_user_sessions(db, target.id)
     record_security_event(db, "user_status_changed", request, user_id=current_user.id)
     db.commit()
-    return RedirectResponse(url="/admin/users", status_code=303)
+    return {"ok": True, "user_id": target.id, "is_active": bool(target.is_active)}
 
 
 # ─────────────────────────── Pages ───────────────────────────
 
-@router.get("/")
-async def index(request: Request, db: Session = Depends(get_db)):
-    current_user = ensure_authenticated(request, db)
-    if current_user.must_change_password:
-        return RedirectResponse(url="/account/password", status_code=303)
-    return render_template(request, "index.html", {"current_user": current_user})
-
-
-@router.get("/upload")
-async def upload_page(request: Request, db: Session = Depends(get_db)):
-    current_user = ensure_authenticated(request, db)
-    if current_user.must_change_password:
-        return RedirectResponse(url="/account/password", status_code=303)
-    return render_template(
-        request,
-        "upload.html",
-        {
-            "current_user": current_user,
-            "max_files_per_upload": MAX_FILES_PER_UPLOAD,
-            "max_upload_mb": MAX_UPLOAD_BYTES // (1024 * 1024),
-        },
-    )
-
-
-@router.post("/upload")
+@router.post("/api/receipts/upload")
 async def upload(
     request: Request,
-    files: list[UploadFile] = File(...),
+    files: list[UploadFile] = File(default=[]),
     csrf_token: str = Form(default=""),
     db: Session = Depends(get_db),
 ):
     current_user = ensure_authenticated(request, db)
-    if current_user.must_change_password:
-        return RedirectResponse(url="/account/password", status_code=303)
     validate_csrf(request, csrf_token)
     enforce_user_rate_limit(db, request, current_user, "upload_attempt", limit=20)
 
@@ -885,21 +895,34 @@ async def upload(
         prepared_uploads.append((original_filename, stored_filename, mime, normalized_bytes, image_hash))
 
     if not prepared_uploads:
-        return render_template(
-            request, "upload.html",
-            {
-                "error": "、".join(errors + duplicate_messages),
-                "current_user": current_user,
-                "max_files_per_upload": MAX_FILES_PER_UPLOAD,
-                "max_upload_mb": MAX_UPLOAD_BYTES // (1024 * 1024),
-            },
-            status_code=400,
-        )
+        if errors:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "アップロードできる画像がありませんでした。",
+                    "code": "no_valid_uploads",
+                    "uploaded_count": 0,
+                    "duplicate_count": len(duplicate_messages),
+                    "error_count": len(errors),
+                    "duplicates": duplicate_messages,
+                    "errors": errors,
+                    "messages": errors + duplicate_messages,
+                },
+            )
+        return {
+            "ok": True,
+            "uploaded_count": 0,
+            "duplicate_count": len(duplicate_messages),
+            "error_count": 0,
+            "duplicates": duplicate_messages,
+            "errors": [],
+        }
 
     semaphore = asyncio.Semaphore(min(MAX_CONCURRENT_ANALYSES, len(prepared_uploads)))
 
     async def analyze_upload(upload_data):
         original_filename, stored_filename, mime, normalized_bytes, image_hash = upload_data
+        analysis_error = None
         try:
             async with semaphore:
                 result = await asyncio.wait_for(
@@ -909,14 +932,17 @@ async def upload(
         except Exception:
             logger.exception("Receipt analysis failed: %s", original_filename)
             result = "AI解析に失敗しました。時間を置いて再度お試しください。"
-
-        return original_filename, stored_filename, mime, normalized_bytes, image_hash, result
+            analysis_error = result
+        return original_filename, stored_filename, mime, normalized_bytes, image_hash, result, analysis_error
 
     analyzed_uploads = await asyncio.gather(
         *(analyze_upload(upload_data) for upload_data in prepared_uploads)
     )
 
-    for original_filename, stored_filename, mime, normalized_bytes, image_hash, result in analyzed_uploads:
+    analysis_errors = []
+    for original_filename, stored_filename, mime, normalized_bytes, image_hash, result, analysis_error in analyzed_uploads:
+        if analysis_error:
+            analysis_errors.append(f"{original_filename}: {analysis_error}")
         receipt_date = extract_receipt_date(result, date.today().year)
         db.add(
             Receipt(
@@ -935,37 +961,40 @@ async def upload(
         db.commit()
     except IntegrityError:
         db.rollback()
-        return render_template(
-            request,
-            "upload.html",
-            {
-                "current_user": current_user,
-                "error": "同じ画像が同時に登録されました。重複分を除いて再度お試しください。",
-                "max_files_per_upload": MAX_FILES_PER_UPLOAD,
-                "max_upload_mb": MAX_UPLOAD_BYTES // (1024 * 1024),
-            },
+        raise HTTPException(
             status_code=409,
+            detail={
+                "error": "同じ画像が同時に登録されました。重複分を除いて再度お試しください。",
+                "code": "duplicate_upload_race",
+                "uploaded_count": 0,
+                "duplicate_count": len(duplicate_messages),
+                "error_count": len(errors) + len(analysis_errors),
+                "duplicates": duplicate_messages,
+                "errors": errors + analysis_errors,
+                "messages": errors + duplicate_messages + analysis_errors,
+            },
         )
-    redirect_url = "/receipts"
-    if duplicate_messages:
-        redirect_url += f"?duplicate_count={len(duplicate_messages)}"
-    return RedirectResponse(url=redirect_url, status_code=303)
+    return {
+        "ok": True,
+        "uploaded_count": len(analyzed_uploads),
+        "duplicate_count": len(duplicate_messages),
+        "error_count": len(errors) + len(analysis_errors),
+        "duplicates": duplicate_messages,
+        "errors": errors + analysis_errors,
+        "messages": errors + duplicate_messages + analysis_errors,
+    }
 
 
-@router.get("/receipts")
+@router.get("/api/receipts")
 async def receipts_view(
     request: Request,
     db: Session = Depends(get_db),
     year: int = Query(default=None),
     month: int = Query(default=None),
     sort: str = Query(default="uploaded_at"),
-    updated: int = Query(default=0),
-    duplicate_count: int = Query(default=0),
-    password_updated: int = Query(default=0),
 ):
     current_user = ensure_authenticated(request, db)
-    if current_user.must_change_password:
-        return RedirectResponse(url="/account/password", status_code=303)
+    sort = validate_receipt_filters(year, month, sort)
     ensure_portfolio_demo_receipts(db)
     query = db.query(Receipt).filter(Receipt.owner_id == current_user.id)
     if year:
@@ -979,27 +1008,19 @@ async def receipts_view(
 
     receipts_data = build_receipt_data(query.all())
     year_total, month_totals = compute_totals(receipts_data)
-
-    return render_template(
-        request,
-        "receipts.html",
-        {
-            "receipts": receipts_data,
-            "current_user": current_user,
-            "available_years": get_available_years(db, current_user.id),
-            "selected_year": year,
-            "selected_month": month,
-            "sort": sort,
-            "year_total": year_total,
-            "month_totals": month_totals,
-            "updated": bool(updated),
-            "duplicate_count": duplicate_count,
-            "password_updated": bool(password_updated),
-        },
-    )
+    return {
+        "receipts": [serialize_receipt(receipt) for receipt in receipts_data],
+        "available_years": get_available_years(db, current_user.id),
+        "selected_year": year,
+        "selected_month": month,
+        "sort": sort,
+        "year_total": year_total,
+        "month_totals": month_totals,
+    }
 
 
-@router.get("/receipts/{receipt_id}/image")
+@router.get("/api/receipts/{receipt_id}/image")
+@router.get("/receipts/{receipt_id}/image", include_in_schema=False)
 async def receipt_image(request: Request, receipt_id: int, db: Session = Depends(get_db)):
     current_user = ensure_authenticated(request, db)
     receipt = get_receipt_or_404(db, receipt_id, current_user.id)
@@ -1016,7 +1037,7 @@ async def receipt_image(request: Request, receipt_id: int, db: Session = Depends
     return FileResponse(file_path, media_type=media_type)
 
 
-@router.post("/receipts/{receipt_id}/toggle-expense")
+@router.post("/api/receipts/{receipt_id}/toggle-expense")
 async def toggle_expense(
     receipt_id: int,
     request: Request,
@@ -1028,10 +1049,11 @@ async def toggle_expense(
     receipt = get_receipt_or_404(db, receipt_id, current_user.id)
     receipt.is_expense = not (receipt.is_expense if receipt.is_expense is not None else True)
     db.commit()
-    return RedirectResponse(url="/receipts", status_code=303)
+    return {"ok": True, "receipt_id": receipt.id, "is_expense": bool(receipt.is_expense)}
 
 
-@router.get("/receipts/export")
+@router.get("/api/receipts/export")
+@router.get("/receipts/export", include_in_schema=False)
 async def export_receipts(
     request: Request,
     db: Session = Depends(get_db),
@@ -1182,13 +1204,15 @@ async def export_receipts(
     )
 
 
-@router.get("/summary")
-async def summary_page(
+@router.get("/api/summary")
+async def summary_data(
     request: Request,
     db: Session = Depends(get_db),
     year: int = Query(default=None),
 ):
     current_user = ensure_authenticated(request, db)
+    validate_receipt_filters(year, None)
+    ensure_portfolio_demo_receipts(db)
     query = db.query(Receipt).filter(Receipt.owner_id == current_user.id, Receipt.is_expense.is_(True))
     if year:
         query = query.filter(extract("year", Receipt.receipt_date) == year)
@@ -1229,22 +1253,17 @@ async def summary_page(
         key=lambda item: item["month"],
     )
 
-    return render_template(
-        request,
-        "summary.html",
-        {
-            "category_list": category_list,
-            "current_user": current_user,
-            "month_list": month_list,
-            "grand_total": f"¥{grand_total:,}",
-            "receipt_count": len(receipts_data),
-            "available_years": get_available_years(db, current_user.id),
-            "selected_year": year,
-        },
-    )
+    return {
+        "category_list": category_list,
+        "month_list": month_list,
+        "grand_total": f"¥{grand_total:,}",
+        "receipt_count": len(receipts_data),
+        "available_years": get_available_years(db, current_user.id),
+        "selected_year": year,
+    }
 
 
-@router.post("/receipts/delete")
+@router.post("/api/receipts/delete")
 async def delete_receipts(
     request: Request,
     ids: list[int] = Form(default=[]),
@@ -1267,27 +1286,22 @@ async def delete_receipts(
             db.query(Receipt).filter(Receipt.owner_id == current_user.id, Receipt.id.in_(owned_ids)).delete(synchronize_session=False)
             record_security_event(db, "receipts_deleted", request, user_id=current_user.id)
         db.commit()
-    return RedirectResponse(url="/receipts", status_code=303)
+    return {"ok": True, "deleted_count": len(owned_ids) if ids else 0}
 
 
-@router.get("/receipts/{receipt_id}/edit")
-async def edit_receipt_page(receipt_id: int, request: Request, db: Session = Depends(get_db)):
+@router.get("/api/receipts/{receipt_id:int}")
+async def receipt_detail(receipt_id: int, request: Request, db: Session = Depends(get_db)):
     current_user = ensure_authenticated(request, db)
     receipt = get_receipt_or_404(db, receipt_id, current_user.id)
-    return render_template(
-        request,
-        "edit_receipt.html",
-        {
-            "current_user": current_user,
-            "receipt": receipt,
-            "current_user": current_user,
-            "edit_fields": parse_receipt_fields(receipt.result),
-            "edit_details": extract_edit_details(receipt.result),
-        },
-    )
+    data = build_receipt_data([receipt])[0]
+    return {
+        "receipt": serialize_receipt(data),
+        "edit_fields": parse_receipt_fields(receipt.result),
+        "edit_details": extract_edit_details(receipt.result),
+    }
 
 
-@router.post("/receipts/{receipt_id}/edit")
+@router.post("/api/receipts/{receipt_id}/edit")
 async def edit_receipt(
     receipt_id: int,
     request: Request,
@@ -1310,4 +1324,4 @@ async def edit_receipt(
     receipt.result = result
     receipt.receipt_date = extract_receipt_date(result, receipt.uploaded_at.year)
     db.commit()
-    return RedirectResponse(url="/receipts?updated=1", status_code=303)
+    return {"ok": True, "redirect_url": "/receipts?updated=1", "receipt_id": receipt.id}

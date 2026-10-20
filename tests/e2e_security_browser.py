@@ -1,6 +1,7 @@
 import base64
 import os
 from pathlib import Path
+import re
 import sys
 
 from playwright.sync_api import expect, sync_playwright
@@ -78,6 +79,12 @@ def cleanup() -> None:
         remove_test_data(db)
 
 
+def goto_ready(page, url: str):
+    response = page.goto(url, wait_until="networkidle")
+    expect(page.locator("body")).to_have_attribute("data-view-state", "ready")
+    return response
+
+
 def main() -> None:
     admin_receipt_id = seed_admin()
     ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
@@ -93,7 +100,7 @@ def main() -> None:
                 "console",
                 lambda message: browser_errors.append(message.text) if message.type == "error" else None,
             )
-            admin_page.goto(f"{BASE_URL}/login", wait_until="networkidle")
+            goto_ready(admin_page, f"{BASE_URL}/login")
             expect(admin_page.get_by_role("heading", name="ログイン")).to_be_visible()
             admin_page.screenshot(path=str(ARTIFACT_DIR / "login-desktop.png"), full_page=True)
 
@@ -101,6 +108,7 @@ def main() -> None:
             admin_page.locator("#password").fill(TEST_PASSWORD)
             admin_page.get_by_role("button", name="ログイン").click()
             admin_page.wait_for_url(f"{BASE_URL}/receipts", wait_until="networkidle")
+            expect(admin_page.locator("body")).to_have_attribute("data-view-state", "ready")
             expect(admin_page.get_by_role("cell", name=MARKER_STORE, exact=True)).to_be_visible()
 
             auth_cookie = next(
@@ -111,10 +119,11 @@ def main() -> None:
 
             admin_page.get_by_role("link", name="ユーザー管理").first.click()
             admin_page.wait_for_url(f"{BASE_URL}/admin/users", wait_until="networkidle")
+            expect(admin_page.locator("body")).to_have_attribute("data-view-state", "ready")
             expect(admin_page.get_by_role("heading", name="ユーザー管理")).to_be_visible()
             admin_page.locator("#inviteEmail").fill(MEMBER_EMAIL)
             admin_page.get_by_role("button", name="招待リンクを発行").click()
-            admin_page.wait_for_load_state("networkidle")
+            expect(admin_page.locator("#invitePath")).to_have_value(re.compile(r"^/register\?token=.+$"))
             invite_path = admin_page.locator("#invitePath").input_value()
             assert invite_path.startswith("/register?token=")
             admin_page.locator("section[aria-labelledby='inviteCreatedTitle']").screenshot(
@@ -127,7 +136,7 @@ def main() -> None:
                 "console",
                 lambda message: browser_errors.append(message.text) if message.type == "error" else None,
             )
-            member_page.goto(f"{BASE_URL}{invite_path}", wait_until="networkidle")
+            goto_ready(member_page, f"{BASE_URL}{invite_path}")
             expect(member_page.get_by_role("heading", name="アカウントを作成")).to_be_visible()
             member_page.locator("#username").fill(MEMBER_USERNAME)
             member_page.locator("#password").fill(TEST_PASSWORD)
@@ -137,8 +146,10 @@ def main() -> None:
             expect(member_page.get_by_text("登録が完了しました")).to_be_visible()
 
             reused = member_context.new_page()
-            reused_response = reused.goto(f"{BASE_URL}{invite_path}", wait_until="networkidle")
-            assert reused_response is not None and reused_response.status == 400
+            reused_response = goto_ready(reused, f"{BASE_URL}{invite_path}")
+            assert reused_response is not None and reused_response.status == 200
+            invalid_api = member_context.request.get(f"{BASE_URL}/api/register?token={invite_path.split('token=', 1)[1]}")
+            assert invalid_api.status == 400
             expect(reused.get_by_role("heading", name="この招待リンクは利用できません")).to_be_visible()
             reused.close()
 
@@ -146,6 +157,7 @@ def main() -> None:
             member_page.locator("#password").fill(TEST_PASSWORD)
             member_page.get_by_role("button", name="ログイン").click()
             member_page.wait_for_url(f"{BASE_URL}/receipts", wait_until="networkidle")
+            expect(member_page.locator("body")).to_have_attribute("data-view-state", "ready")
             expect(member_page.get_by_text(MARKER_STORE)).to_have_count(0)
             forbidden_response = member_context.request.get(
                 f"{BASE_URL}/receipts/{admin_receipt_id}/image"

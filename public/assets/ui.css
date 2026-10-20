@@ -1,0 +1,75 @@
+[data-view-state="loading"] #appView,
+[data-view-state="error"] #appView {
+    min-height: 12rem;
+}
+
+.ui-auth-page {
+    min-height: calc(100vh - 4rem);
+}
+
+.ui-error-spacing {
+    padding-block: 4rem;
+}
+
+.ui-global-alert {
+    padding-bottom: 1rem;
+}
+
+.ui-result-list {
+    list-style-type: disc;
+    padding-left: 1.25rem;
+}
+
+@media (min-width: 640px) {
+    .ui-home-spacing {
+        padding-block: 4rem;
+    }
+
+    .ui-error-panel-spacing {
+        padding: 2.5rem;
+    }
+}
+
+.demo-mode-banner {
+    border-bottom: 1px solid #bfdbfe;
+    background: #eff6ff;
+    padding: .65rem 1rem;
+    color: #1e40af;
+    font-size: .75rem;
+    font-weight: 700;
+    text-align: center;
+}
+
+.ui-table-wrap {
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+    border-radius: 1rem;
+    background: #fff;
+}
+
+.ui-filter-link[aria-current="page"] {
+    background: #2563eb;
+    color: #fff;
+}
+
+.ui-filter-link[aria-current="false"] {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+.ui-nav-link[aria-current="page"] {
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+.ui-progress-fill {
+    height: 100%;
+    border-radius: inherit;
+    background: #60a5fa;
+}
+
+@media (max-width: 767px) {
+    .demo-receipt-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
